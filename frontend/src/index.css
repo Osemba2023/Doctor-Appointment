@@ -127,3 +127,56 @@ label {
   margin-left: -20px;
   border-bottom-left-radius: 10px;
 }
+.doctor-info p {
+  margin: 4px 0 !important;
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.75);
+}
+.card:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  transition: all 0.3s ease;
+}
+.book-container {
+  max-width: 600px;
+  margin: auto;
+  padding: 20px;
+  background: #f2f2f2;
+  border-radius: 12px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.doctor-card {
+  background: white;
+  padding: 15px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.form-group {
+  margin: 15px 0;
+}
+
+input[type="date"],
+input[type="time"] {
+  width: 100%;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+.book-btn {
+  width: 100%;
+  padding: 10px;
+  background-color: #007bff;
+  color: white;
+  font-weight: bold;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.book-btn:hover {
+  background-color: #0056b3;
+}
+

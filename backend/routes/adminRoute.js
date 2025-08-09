@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middlewares/authMiddleware');
-const User = require('../models/userModel');
+const User = require('../models/UserModel');
 const Doctor = require('../models/doctorModel');
 
 // GET ALL USERS (Only role 'user')
@@ -26,17 +26,15 @@ router.get('/get-all-users', authMiddleware, async (req, res) => {
 router.get('/get-all-doctors', authMiddleware, async (req, res) => {
   try {
     const doctors = await Doctor.find({});
-    res.status(200).send({
+    console.log(doctors); // ✅ Safe logging
+
+    res.send({
       success: true,
       message: 'Doctors fetched successfully',
-      data: doctors
+      data: doctors,
     });
   } catch (error) {
-    res.status(500).send({
-      success: false,
-      message: 'Error fetching doctors',
-      error
-    });
+    res.status(500).send({ success: false, message: 'Error fetching doctors', error });
   }
 });
 
@@ -70,14 +68,14 @@ router.post('/change-doctor-status', authMiddleware, async (req, res) => {
 
     await user.save(); // ✅ save updated user
 
-    res.status(200).send({
+    return res.status(200).send({
       success: true,
       message: `Doctor account ${status} successfully`,
       data: doctor
     });
   } catch (error) {
     console.error('Doctor status update error:', error);
-    res.status(500).send({ success: false, message: 'Server error', error: error.message });
+    return res.status(500).send({ success: false, message: 'Server error', error: error.message });
   }
 });
 

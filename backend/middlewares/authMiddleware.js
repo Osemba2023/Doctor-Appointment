@@ -1,15 +1,18 @@
 const jwt = require("jsonwebtoken");
-
 module.exports = async (req, res, next) => {
   try {
-    const authHeader = req.headers["authorization"];
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      console.log("❌ No auth header");
-      return res.status(401).send({ message: "Auth header missing", success: false });
+    const authHeader = req.headers.authorization;
+    console.log("🔐 Incoming auth header:", authHeader);
+
+    const token = authHeader?.split(" ")[1];
+
+    if (!token) {
+      console.log("❌ No token found");
+      return res.status(401).send({ message: "Authorization token missing", success: false });
     }
 
-    const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log("🧾 Decoded token:", decoded);
 
     if (!decoded?.id) {
       console.log("❌ Invalid token payload");
@@ -25,9 +28,11 @@ module.exports = async (req, res, next) => {
     next();
   } catch (error) {
     console.error("❌ Auth middleware error:", error.message);
-    res.status(500).send({ message: "Auth Failed", success: false, error: error.message });
+    return res.status(500).send({ message: "Auth Failed", success: false, error: error.message });
   }
 };
+
+
 
 
 

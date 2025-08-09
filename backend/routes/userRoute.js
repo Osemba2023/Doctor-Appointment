@@ -1,10 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const User = require('../models/userModel');
+const User = require('../models/UserModel');
 const Doctor = require('../models/doctorModel');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+const jwt = require('jsonwebtoken'); // ✅ Keep only ONE of this
 const authMiddleware = require('../middlewares/authMiddleware');
+const Appointment = require("../models/appointmentModel");
+const moment = require("moment");
+
 
 // ✅ LOGIN
 router.post('/login', async (req, res) => {
@@ -51,232 +54,282 @@ router.post('/login', async (req, res) => {
   }
 });
 
-  // ✅ REGISTER
-  router.post('/register', async (req, res) => {
-    try {
-      const { name, email, password, role } = req.body;
+// ✅ REGISTER
+router.post('/register', async (req, res) => {
+  try {
+    const { name, email, password, role } = req.body;
 
-      if (!name || !email || !password) {
-        return res.status(400).send({ success: false, message: "All fields are required" });
-      }
+    if (!name || !email || !password) {
+      return res.status(400).send({ success: false, message: "All fields are required" });
+    }
 
-      const existingUser = await User.findOne({ email });
-      if (existingUser) {
-        return res.status(400).send({ success: false, message: "User already exists" });
-      }
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).send({ success: false, message: "User already exists" });
+    }
 
-      const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-      const newUser = new User({
-        name,
-        email,
-        password: hashedPassword,
-        role: role || 'user',
-        isAdmin: role === 'admin',
-        unseenNotifications: [],
-        seenNotifications: []
+    const newUser = new User({
+      name,
+      email,
+      password: hashedPassword,
+      role: role || 'user',
+      isAdmin: role === 'admin',
+      unseenNotifications: [],
+      seenNotifications: []
+    });
+
+    await newUser.save();
+
+    res.status(201).send({ success: true, message: 'User registered successfully' });
+  } catch (error) {
+    res.status(500).send({ success: false, message: 'Error registering user' });
+  }
+});
+
+// ✅ GET USER INFO BY ID (from token)
+router.post('/get-user-info-by-id', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('-password');
+    if (!user) {
+      return res.status(404).send({ success: false, message: "User not found" });
+    }
+
+    res.status(200).send({ success: true, data: user });
+  } catch (error) {
+    res.status(500).send({ message: "Error getting user info", success: false, error: error.message });
+  }
+});
+
+// ✅ USER applies to become a doctor
+router.post('/apply-doctor-account', authMiddleware, async (req, res) => {
+  try {
+    const newDoctor = new Doctor({ ...req.body, status: 'pending' });
+    await newDoctor.save();
+
+    const adminUser = await User.findOne({ role: 'admin' });
+
+    if (adminUser) {
+      adminUser.unseenNotifications.push({
+        type: "new-doctor-request",
+        message: `${newDoctor.firstName} ${newDoctor.lastName} has applied for a doctor account`,
+        data: {
+          doctorId: newDoctor._id,
+          name: `${newDoctor.firstName} ${newDoctor.lastName}`,
+        },
+        onClickPath: "/admin/doctorslist",
       });
 
-      await newUser.save();
-
-      res.status(201).send({ success: true, message: 'User registered successfully' });
-    } catch (error) {
-      res.status(500).send({ success: false, message: 'Error registering user' });
+      await adminUser.save();
     }
-  });
 
-  // ✅ GET USER INFO BY ID (from token)
-  router.post('/get-user-info-by-id', authMiddleware, async (req, res) => {
-    try {
-      const user = await User.findById(req.user.id).select('-password');
-      if (!user) {
-        return res.status(404).send({ success: false, message: "User not found" });
-      }
+    res.status(200).send({ success: true, message: "Doctor account applied successfully" });
+  } catch (error) {
+    console.error("Apply Doctor Error:", error);  // 👈 this helps debug
+    res.status(500).send({
+      message: 'Error applying for doctor account',
+      success: false,
+      error: error.message
+    });
+  }
+});
 
-      res.status(200).send({ success: true, data: user });
-    } catch (error) {
-      res.status(500).send({ message: "Error getting user info", success: false, error: error.message });
+// ✅ Admin manually makes a user a doctor
+router.post('/make-doctor', authMiddleware, async (req, res) => {
+  try {
+    const existingDoctor = await Doctor.findOne({ userId: req.body.userId });
+    if (existingDoctor) {
+      return res.send({ success: false, message: "User is already a doctor" });
     }
-  });
 
-  // ✅ USER applies to become a doctor
-  router.post('/apply-doctor-account', authMiddleware, async (req, res) => {
-    try {
-      const newDoctor = new Doctor({ ...req.body, status: 'pending' });
-      await newDoctor.save();
+    const newDoctor = new Doctor({
+      userId: req.body.userId,
+      status: "pending",
+      firstName: "",
+      lastName: "",
+      phoneNumber: "",
+      specialization: "",
+    });
 
-      const adminUser = await User.findOne({ role: 'admin' });
+    await newDoctor.save();
 
-      if (adminUser) {
-        adminUser.unseenNotifications.push({
-          type: "new-doctor-request",
-          message: `${newDoctor.firstName} ${newDoctor.lastName} has applied for a doctor account`,
-          data: {
-            doctorId: newDoctor._id,
-            name: `${newDoctor.firstName} ${newDoctor.lastName}`,
-          },
-          onClickPath: "/admin/doctors",
-        });
+    await User.findByIdAndUpdate(req.body.userId, {
+      isDoctor: true,
+      role: 'doctor'
+    });
 
-        await adminUser.save();
-      }
+    res.send({ success: true, message: "Doctor account created successfully" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ success: false, message: "Server error", error });
+  }
+});
 
-      res.status(200).send({ success: true, message: "Doctor account applied successfully" });
-    } catch (error) {
-      console.error("Apply Doctor Error:", error);  // 👈 this helps debug
-      res.status(500).send({
-        message: 'Error applying for doctor account',
-        success: false,
-        error: error.message
-      });
+// ✅ GET ALL USERS (only normal users)
+router.get('/get-all-users', authMiddleware, async (req, res) => {
+  try {
+    const users = await User.find({ role: 'user' });
+    res.status(200).send({
+      success: true,
+      message: 'Users fetched successfully',
+      data: users,
+    });
+  } catch (error) {
+    res.status(500).send({
+      success: false,
+      message: 'Error fetching users',
+      error,
+    });
+  }
+});
+// ✅ GET ALL DOCTORS
+router.get('/get-all-doctors', authMiddleware, async (req, res) => {
+  try {
+    const doctors = await Doctor.find({});
+    res.status(200).send({
+      success: true,
+      message: 'Doctors fetched successfully',
+      data: doctors,
+    });
+  } catch (error) {
+    res.status(500).send({
+      success: false,
+      message: 'Error fetching doctors',
+      error,
+    });
+  }
+});
+router.get('/get-all-approved-doctors', authMiddleware, async (req, res) => {
+  try {
+    const doctors = await Doctor.find({ status: "approved" });
+    console.log(doctors); // ✅ Safe logging
+
+    res.send({
+      success: true,
+      message: 'Doctors fetched successfully',
+      data: doctors,
+    });
+  } catch (error) {
+    res.status(500).send({ success: false, message: 'Error fetching doctors', error });
+  }
+});
+
+
+// ✅ GET a doctor's profile by userId
+router.get('/get-doctor-info/:userId', authMiddleware, async (req, res) => {
+  try {
+    const doctor = await Doctor.findOne({ userId: req.params.userId });
+    if (!doctor) return res.status(404).send({ success: false, message: 'Doctor not found' });
+
+    res.send({ success: true, data: doctor });
+  } catch (error) {
+    res.status(500).send({ success: false, message: 'Server error', error });
+  }
+});
+
+// ✅ UPDATE a doctor's profile by userId
+router.put('/update-doctor-info/:userId', authMiddleware, async (req, res) => {
+  try {
+    const doctor = await Doctor.findOneAndUpdate(
+      { userId: req.params.userId },
+      req.body,
+      { new: true }
+    );
+
+    if (!doctor) {
+      return res.status(404).send({ success: false, message: 'Doctor not found' });
     }
-  });
 
-  // ✅ Admin manually makes a user a doctor
-  router.post('/make-doctor', authMiddleware, async (req, res) => {
-    try {
-      const existingDoctor = await Doctor.findOne({ userId: req.body.userId });
-      if (existingDoctor) {
-        return res.send({ success: false, message: "User is already a doctor" });
-      }
+    res.send({ success: true, message: 'Profile updated successfully', data: doctor });
+  } catch (error) {
+    res.status(500).send({ success: false, message: 'Update failed', error });
+  }
+});
 
-      const newDoctor = new Doctor({
-        userId: req.body.userId,
-        status: "pending",
-        firstName: "",
-        lastName: "",
-        phoneNumber: "",
-        specialization: "",
-      });
 
-      await newDoctor.save();
-
-      await User.findByIdAndUpdate(req.body.userId, {
-        isDoctor: true,
-        role: 'doctor'
-      });
-
-      res.send({ success: true, message: "Doctor account created successfully" });
-    } catch (error) {
-      console.error(error);
-      res.status(500).send({ success: false, message: "Server error", error });
+// ✅ Mark all notifications as seen
+router.post('/mark-all-notifications-as-seen', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).send({ success: false, message: "User not found" });
     }
-  });
 
-  // ✅ GET ALL USERS (only normal users)
-  router.get('/get-all-users', authMiddleware, async (req, res) => {
-    try {
-      const users = await User.find({ role: 'user' });
-      res.status(200).send({
-        success: true,
-        message: 'Users fetched successfully',
-        data: users,
-      });
-    } catch (error) {
-      res.status(500).send({
-        success: false,
-        message: 'Error fetching users',
-        error,
-      });
+    user.seenNotifications.push(...user.unseenNotifications);
+    user.unseenNotifications = [];
+
+    await user.save();
+
+    res.status(200).send({
+      success: true,
+      message: "All notifications marked as seen",
+      data: user,
+    });
+  } catch (error) {
+    res.status(500).send({ success: false, message: "Error marking notifications as seen", error });
+  }
+});
+
+// ✅ Delete all notifications
+router.post('/delete-all-notifications', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).send({ success: false, message: "User not found" });
     }
-  });
+    user.seenNotifications = [];
+    user.unseenNotifications = [];
+    await user.save();
 
-  // ✅ GET ALL DOCTORS
-  router.get('/get-all-doctors', authMiddleware, async (req, res) => {
-    try {
-      const doctors = await Doctor.find({});
-      res.status(200).send({
-        success: true,
-        message: 'Doctors fetched successfully',
-        data: doctors,
-      });
-    } catch (error) {
-      res.status(500).send({
-        success: false,
-        message: 'Error fetching doctors',
-        error,
-      });
-    }
-  });
+    res.status(200).send({
+      success: true,
+      message: "All notifications deleted successfully",
+      data: user,
+    });
+  } catch (error) {
+    res.status(500).send({ success: false, message: "Error deleting notifications", error });
+  }
+});
+router.get('/get-appointments-by-user-id', authMiddleware, async (req, res) => {
+  try {
+    const appointments = await Appointment.find({ userId: req.user.id }); // ✅ use req.user.id not req.body
+    res.send({
+      success: true,
+      message: 'Appointments fetched successfully',
+      data: appointments,
+    });
+  } catch (error) {
+    res.status(500).send({ success: false, message: 'Error fetching appointments', error });
+  }
+});
+router.post('/add-medical-history', authMiddleware, async (req, res) => {
+  try {
+    const { userId, doctorId, diagnosis, prescription, description } = req.body;
 
-  // ✅ GET a doctor's profile by userId
-  router.get('/get-doctor-info/:userId', authMiddleware, async (req, res) => {
-    try {
-      const doctor = await Doctor.findOne({ userId: req.params.userId });
-      if (!doctor) return res.status(404).send({ success: false, message: 'Doctor not found' });
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
-      res.send({ success: true, data: doctor });
-    } catch (error) {
-      res.status(500).send({ success: false, message: 'Server error', error });
-    }
-  });
+    const newEntry = {
+      doctorId,
+      diagnosis,
+      prescription,
+      description,
+      date: new Date()
+    };
 
-  // ✅ UPDATE a doctor's profile by userId
-  router.put('/update-doctor-info/:userId', authMiddleware, async (req, res) => {
-    try {
-      const doctor = await Doctor.findOneAndUpdate(
-        { userId: req.params.userId },
-        req.body,
-        { new: true }
-      );
+    user.medicalHistory.push(newEntry);
+    await user.save();
 
-      if (!doctor) {
-        return res.status(404).send({ success: false, message: 'Doctor not found' });
-      }
+    res.status(200).json({ message: 'Medical history added successfully', history: newEntry });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Something went wrong' });
+  }
+});
 
-      res.send({ success: true, message: 'Profile updated successfully', data: doctor });
-    } catch (error) {
-      res.status(500).send({ success: false, message: 'Update failed', error });
-    }
-  });
 
-  // ✅ Mark all notifications as seen
-  router.post('/mark-all-notifications-as-seen', authMiddleware, async (req, res) => {
-    try {
-      const user = await User.findById(req.user.id);
-      if (!user) {
-        return res.status(404).send({ success: false, message: "User not found" });
-      }
-
-      user.seenNotifications.push(...user.unseenNotifications);
-      user.unseenNotifications = [];
-
-      await user.save();
-
-      res.status(200).send({
-        success: true,
-        message: "All notifications marked as seen",
-        data: user,
-      });
-    } catch (error) {
-      res.status(500).send({ success: false, message: "Error marking notifications as seen", error });
-    }
-  });
-
-  // ✅ Delete all notifications
-  router.post('/delete-all-notifications', authMiddleware, async (req, res) => {
-    try {
-      const user = await User.findById(req.user.id);
-      if (!user) {
-        return res.status(404).send({ success: false, message: "User not found" });
-      }
-
-      user.seenNotifications = [];
-      user.unseenNotifications = [];
-
-      await user.save();
-
-      res.status(200).send({
-        success: true,
-        message: "All notifications deleted successfully",
-        data: user,
-      });
-    } catch (error) {
-      res.status(500).send({ success: false, message: "Error deleting notifications", error });
-    }
-  });
-
-  module.exports = router;
+module.exports = router;
 
 
 

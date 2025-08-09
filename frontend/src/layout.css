@@ -1,0 +1,257 @@
+.main {
+  padding: 20px;
+  height: 100vh;
+}
+
+.logo {
+  color: white;
+  font-weight: bold;
+  font-size: 20px;
+  text-align: center;
+}
+
+/* Sidebar - Expanded */
+.sidebar {
+  background-color: rgb(14, 240, 14) !important;
+  border-radius: 5px;
+  box-shadow: 0 0 2px grey;
+  margin-right: 20px;
+  min-height: 100%;
+  padding: 20px;
+  width: 240px;
+  transition: all 0.3s ease;
+}
+
+/* Sidebar - Collapsed */
+.collapsed-sidebar {
+  width: 60px;
+  padding: 20px 10px;
+  transition: all 0.3s ease;
+}
+
+/* Hide span (menu text) when collapsed */
+.collapsed-sidebar .menu-item a span {
+  display: none;
+}
+
+/* Center icon vertically and horizontally when collapsed */
+.collapsed-sidebar .menu-item {
+  justify-content: center;
+  padding: 10px 0;
+}
+
+/* Layout container */
+.logout-item {
+  margin-top: 20px;
+  color: white;
+  cursor: pointer;
+}
+.logout-item:hover {
+  background-color: #ff4d4f;
+  color: white;
+}
+
+
+/* Content area */
+.content {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+/* Header styling */
+.header {
+  background-color: white;
+  border-radius: 5px;
+  box-shadow: 0 0 2px grey;
+  margin-bottom: 20px;
+  height: 10vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 15px;
+}
+
+/* Main body section */
+.body {
+  background-color: white;
+  border-radius: 5px;
+  box-shadow: 0 0 2px grey;
+  flex: 1;
+  height: 82vh;
+  width: 100%;
+  padding: 15px;
+  overflow-y: auto;
+}
+
+/* Sidebar menu container */
+.menu {
+  margin-top: 80px;
+  padding: 0 10px;
+}
+
+/* Sidebar menu item */
+.menu-item {
+  margin-top: 10px;
+  padding: 10px;
+  color: white;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  border-radius: 5px;
+  transition: background-color 0.3s ease;
+}
+
+/* Sidebar links */
+.menu-item a {
+  color: white;
+  text-decoration: none;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+/* Sidebar icons */
+.menu-item i {
+  font-size: 20px;
+  color: white;
+  margin-right: 8px;
+}
+
+/* Menu hover effect */
+.menu-item:hover {
+  background-color: #1ed760;
+  cursor: pointer;
+}
+
+/* Active menu item */
+.active-menu-item {
+  background-color: #d1e7dd;
+  font-weight: bold;
+  font-size: 16px;
+  color: black !important;
+  border-radius: 5px;
+}
+.header-action-icon{
+  font-size: 30px;
+  color: #1ed760;
+  cursor: pointer;
+  padding-left: 10px;
+}
+
+.layout-action-item {
+  font-size: 28px;
+  color: #1ed760;
+  cursor: pointer;
+}
+
+/* Ant Design badge number styling */
+.ant-badge-count {
+  font-size: 14px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  line-height: 18px !important;
+  padding: 0 6px !important;
+  background-color: red;
+}
+.user-info {
+  margin-top: 10px;
+  text-align: center;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.user-profile-summary {
+  margin-top: 10px;
+  text-align: center;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.user-icon {
+  font-size: 28px;
+  color: white;
+  margin-bottom: 4px;
+}
+.user-details {
+  text-align: center;
+}
+.user-name {
+  font-size: 14px;
+  color: white;
+  font-weight: 600;
+}
+.user-role {
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: bold;
+  background-color: white;
+  color: #1ed760;
+  padding: 2px 10px;
+  border-radius: 12px;
+}
+
+.role-badge {
+  background-color: #fff;
+  color: #1ed760;
+  padding: 5px 10px;
+  font-size: 14px;
+  border-radius: 15px;
+  font-weight: bold;
+  display: inline-block;
+}
+.user-role-badge {
+  margin-top: 2px;
+  background-color: white;
+  color: #1ed760;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: bold;
+  display: inline-block;
+}
+/* Notification dot fix */
+.ant-scroll-number-only-unit {
+  padding: 0 !important;
+}
+
+/* Toggle icon (menu/close) */
+.close-items {
+  font-size: 26px;
+  color: black !important;
+  cursor: pointer;
+  padding-left: 10px;
+}
+
+/* Responsive design */
+@media screen and (max-width: 760px) {
+  .menu {
+    padding: 0 5px;
+  }
+
+  .sidebar {
+    width: 100px;
+    padding: 10px;
+  }
+
+  .collapsed-sidebar {
+    width: 50px;
+    padding: 10px 5px;
+  }
+
+  .header {
+    height: 60px;
+  }
+
+  .body {
+    padding: 10px;
+  }
+}
+

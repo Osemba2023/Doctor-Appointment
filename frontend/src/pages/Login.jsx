@@ -50,14 +50,15 @@ function Login() {
         // 🚀 Redirect based on role
         if (role === "admin") {
           toast("Redirecting to Admin Dashboard");
-          navigate("/"); // Assuming '/' is the admin dashboard or a general landing page
+          navigate("/");
         } else if (role === "doctor") {
           toast("Redirecting to Doctor Appointments");
-          navigate("/doctor-appointments"); // <-- CORRECTED PATH: Redirect to a valid doctor route
+          navigate("/doctor/appointments"); // ✅ matches App.jsx
         } else {
           toast("Redirecting to User Dashboard");
-          navigate("/"); // Assuming '/' is the user dashboard or a general landing page
+          navigate("/");
         }
+
 
       } else {
         toast.error(response.data.message);

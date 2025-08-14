@@ -18,8 +18,9 @@ import DoctorsList from '@/pages/Admin/DoctorsList.jsx';
 import DoctorProfile from '@/pages/DoctorProfile.jsx';
 import BookAppointment from '@/pages/BookAppointment.jsx';
 import Appointments from '@/pages/Appointments.jsx'; // ✅ Add this line
-import DoctorAppointments from '@/pages/Doctor/DoctorAppointments.jsx';
+import DoctorAppointmentDetails from "@/pages/Doctor/DoctorAppointmentDetails.jsx";
 import PatientHistory from '@/pages/Doctor/PatientHistory.jsx';
+import DoctorAppointments from '@/pages/Doctor/DoctorAppointments.jsx';
 
 
 function App() {
@@ -31,20 +32,24 @@ function App() {
   ];
 
   const protectedRoutes = [
-  { path: '/', element: <Home /> },
-  { path: '/apply-doctor', element: <ApplyDoctor /> },
-  { path: '/notifications', element: <Notifications /> },
-  { path: '/admin', element: <AdminDashboard /> },
-  { path: '/users', element: <UsersList /> },
-  { path: '/doctors', element: <DoctorsList /> },
-  { path: '/admin/doctors', element: <DoctorsList /> },
-  { path: '/doctor/appointments', element: <DoctorAppointments />, role: 'doctor' },
-  { path: '/profile/:userId', element: <DoctorProfile />, role: 'doctor' },
-  { path: '/book-appointment/:userId', element: <BookAppointment />, role: 'user' },
-  { path: '/appointments', element: <Appointments />, role: 'user' },
-  { path: '/admin/doctorslist', element: <DoctorsList /> },
-  { path: '/doctor/patient-history/:userId', element: <PatientHistory />, role: 'doctor' }, // ✅ This is correct
-];
+    { path: '/', element: <Home /> },
+    { path: '/apply-doctor', element: <ApplyDoctor /> },
+    { path: '/notifications', element: <Notifications /> },
+    { path: '/admin', element: <AdminDashboard /> },
+    { path: '/users', element: <UsersList /> },
+    { path: '/doctors', element: <DoctorsList /> },
+    { path: '/admin/doctors', element: <DoctorsList /> },
+    { path: '/doctor-appointments/:appointmentId', element: <DoctorAppointmentDetails />, role: 'doctor' },
+    { path: '/profile/:userId', element: <DoctorProfile />, role: 'doctor' },
+    { path: '/book-appointment/:userId', element: <BookAppointment />, role: 'user' },
+    { path: '/appointments', element: <Appointments />, role: 'user' },
+    { path: '/admin/doctorslist', element: <DoctorsList /> },
+    { path: '/doctor/patient-history/:userId', element: <PatientHistory />, role: 'doctor' }, // ✅ This is correct
+    { path: '/doctor/appointments', element: <DoctorAppointments />, role: 'doctor' },
+    { path: '/doctor-appointments', element: <DoctorAppointments />, role: 'doctor' },
+
+
+  ];
 
 
   return (

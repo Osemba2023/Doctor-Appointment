@@ -35,28 +35,44 @@ router.put('/update-doctor-profile/:userId', authMiddleware, async (req, res) =>
     res.status(500).send({ success: false, message: 'Update failed', error });
   }
 });
-
-// ✅ Get all appointments for a doctor
-router.get('/get-appointments-by-doctor-id', authMiddleware, async (req, res) => {
+// Get all appointments for logged-in doctor
+router.get('/doctor/appointments', authMiddleware, async (req, res) => {
   try {
+    console.log("User ID from token:", req.user.id);
     const doctor = await Doctor.findOne({ userId: req.user.id });
     if (!doctor) {
-      return res.status(404).send({ success: false, message: 'Doctor not found' });
+      console.log("Doctor not found for user:", req.user.id);
+      return res.status(404).json({ success: false, message: "Doctor not found" });
     }
-
-    console.log("🔍 Looking for doctor with userId:", req.user.id);
-
     const appointments = await Appointment.find({ doctorId: doctor._id })
       .populate('userId', 'name email')
       .sort({ date: 1 });
+    res.status(200).json({ success: true, data: appointments });
+  } catch (error) {
+    console.error("Error in /doctor/appointments:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ✅ Get all appointments for a doctor
+router.post("/get-appointments-by-doctor-id", authMiddleware, async (req, res) => {
+  try {
+    const doctorId = req.user.id; // doctorId from JWT token
+
+    const appointments = await Appointment.find({ doctorId })
+      .populate("userId", "name email phone")
+      .sort({ date: -1 });
 
     res.status(200).send({
       success: true,
-      message: 'Appointments fetched successfully',
-      data: appointments
+      data: appointments,
     });
   } catch (error) {
-    res.status(500).send({ success: false, message: 'Error fetching appointments', error });
+    console.error("Error fetching doctor appointments:", error);
+    res.status(500).send({
+      success: false,
+      message: "Error fetching appointments",
+    });
   }
 });
 // Get all upcoming appointments for a doctor
@@ -93,33 +109,30 @@ router.post('/change-appointment-status', authMiddleware, async (req, res) => {
 
     const appointment = await Appointment.findById(appointmentId);
     if (!appointment) {
-      return res.status(404).send({ success: false, message: 'Appointment not found' });
+      return res.status(404).json({ success: false, message: 'Appointment not found' });
     }
 
     appointment.status = status;
     await appointment.save();
 
+    // Notify patient
     const user = await User.findById(appointment.userId);
-    if (!user) {
-      return res.status(404).send({ success: false, message: 'User not found' });
+    if (user) {
+      user.unseenNotifications.push({
+        type: 'appointment-status-changed',
+        message: `Your appointment on ${appointment.date.toDateString()} at ${appointment.time} has been ${status}.`,
+        onClickPath: '/appointments', // patient side appointments page
+      });
+      await user.save();
     }
 
-    user.unseenNotifications.push({
-      type: 'appointment-status-changed',
-      message: `Your appointment on ${appointment.date.toDateString()} at ${appointment.time} has been ${status}.`,
-      onClickPath: '/appointments',
-    });
-
-    await user.save();
-
-    return res.status(200).send({
+    res.status(200).json({
       success: true,
       message: `Appointment ${status} successfully`,
       data: appointment,
     });
   } catch (error) {
-    console.error('Error changing appointment status:', error);
-    return res.status(500).send({ success: false, message: 'Server error', error: error.message });
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 });
 
@@ -159,7 +172,26 @@ router.post('/add-history', authMiddleware, async (req, res) => {
   }
 });
 
-module.exports = router;
+// ✅ Fetch medical history for a patient
+router.get("/get-patient-history/:userId", authMiddleware, async (req, res) => {
+  try {
+    const patient = await User.findById(req.params.userId)
+      .select("name medicalHistory")
+      .populate("medicalHistory.doctorId", "name");
 
+    if (!patient) {
+      return res.status(404).send({ success: false, message: "Patient not found" });
+    }
+
+    res.status(200).send({
+      success: true,
+      data: patient.medicalHistory || [],
+    });
+  } catch (error) {
+    res.status(500).send({ success: false, message: "Error fetching history", error: error.message });
+  }
+});
+
+module.exports = router;
 
 

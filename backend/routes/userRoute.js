@@ -55,36 +55,37 @@ router.post('/login', async (req, res) => {
 });
 
 // ✅ REGISTER
-router.post('/register', async (req, res) => {
+router.post("/register", async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, phoneNumber } = req.body;
 
     if (!name || !email || !password) {
-      return res.status(400).send({ success: false, message: "All fields are required" });
+      return res.status(400).json({ success: false, message: "All fields are required" });
     }
 
+    // Check if user exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).send({ success: false, message: "User already exists" });
+      return res.status(400).json({ success: false, message: "User already exists" });
     }
 
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Save user
     const newUser = new User({
       name,
       email,
       password: hashedPassword,
-      role: role || 'user',
-      isAdmin: role === 'admin',
-      unseenNotifications: [],
-      seenNotifications: []
+      phoneNumber, // ✅ include phone number
     });
 
     await newUser.save();
 
-    res.status(201).send({ success: true, message: 'User registered successfully' });
+    res.status(201).json({ success: true, message: "User registered successfully" });
   } catch (error) {
-    res.status(500).send({ success: false, message: 'Error registering user' });
+    console.error("Register Error:", error); // ✅ log actual error
+    res.status(500).json({ success: false, message: "Error registering user", error: error.message });
   }
 });
 
@@ -327,6 +328,40 @@ router.post('/add-medical-history', authMiddleware, async (req, res) => {
     res.status(500).json({ message: 'Something went wrong' });
   }
 });
+
+// Get logged-in patient's medical history
+router.get("/my-history", authMiddleware, async (req, res) => {
+  try {
+    const patient = await User.findById(req.user.id)
+      .select("medicalHistory")
+      .populate("medicalHistory.doctorId", "firstName lastName specialization");
+
+    if (!patient) {
+      return res.status(404).send({ success: false, message: "Patient not found" });
+    }
+
+    res.status(200).send({
+      success: true,
+      data: patient.medicalHistory || [],
+    });
+  } catch (error) {
+    console.error("Error fetching patient medical history:", error);
+    res.status(500).send({ success: false, message: "Error fetching medical history" });
+  }
+});
+
+
+// routes/userRoute.js
+router.get("/profile", authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("name email phoneNumber");
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 
 
 module.exports = router;

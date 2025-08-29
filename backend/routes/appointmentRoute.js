@@ -13,6 +13,9 @@ const isSameOrBefore = require("dayjs/plugin/isSameOrBefore");
 dayjs.extend(isSameOrAfter);
 dayjs.extend(isSameOrBefore);
 const sendEmail = require('../utils/sendEmails');
+const suggestNextSlots = require("../utils/suggestNextSlots");
+
+
 
 
 // ✅ Route to check doctor's booking availability
@@ -27,16 +30,9 @@ router.post("/booking-availability", authMiddleware, async (req, res) => {
       });
     }
 
-    console.log("📥 Booking availability payload:", req.body);
-
-    // Convert date and time into dayjs objects
     const selectedDate = dayjs(date, "YYYY-MM-DD");
     const fromTime = dayjs(`${date} ${startTime}`, "YYYY-MM-DD HH:mm");
     const toTime = dayjs(`${date} ${endTime}`, "YYYY-MM-DD HH:mm");
-
-    console.log("🗓 Selected Date:", selectedDate.format());
-    console.log("⏳ From Time:", fromTime.format());
-    console.log("⏳ To Time:", toTime.format());
 
     // Sunday rule
     if (selectedDate.day() === 0) {
@@ -80,17 +76,59 @@ router.post("/booking-availability", authMiddleware, async (req, res) => {
     });
 
     if (overlappingAppointment) {
+      const suggestions = [];
+      let searchTime = toTime.clone(); // Start after requested end time
+      let daysSearched = 0;
+
+      while (suggestions.length < 3 && daysSearched < 14) { // Search up to 2 weeks ahead
+        const currentDay = searchTime.day();
+
+        // Skip Sundays
+        if (currentDay !== 0) {
+          // Skip Saturday after 4 PM
+          if (!(currentDay === 6 && searchTime.hour() >= 16)) {
+            const endCandidate = searchTime.add(30, "minute");
+
+            const conflict = await Appointment.findOne({
+              doctorId,
+              status: { $in: ["approved", "pending"] },
+              $or: [
+                { start: { $lt: endCandidate.toDate() }, end: { $gt: searchTime.toDate() } },
+              ],
+            });
+
+            if (!conflict) {
+              suggestions.push({
+                start: searchTime.format("HH:mm"),
+                end: endCandidate.format("HH:mm"),
+                date: searchTime.format("YYYY-MM-DD"),
+              });
+            }
+          }
+        }
+
+        searchTime = searchTime.add(30, "minute");
+
+        // If past 6 PM, jump to next day at 9 AM
+        if (searchTime.hour() >= 18) {
+          searchTime = searchTime.add(1, "day").hour(9).minute(0);
+          daysSearched++;
+        }
+      }
+
       return res.status(200).json({
         success: false,
         message: "Doctor is not available for this time slot.",
+        suggestions,
       });
     }
 
-    // ✅ If all checks pass
+    // ✅ Available
     res.status(200).json({
       success: true,
       message: "Doctor is available for this time slot.",
     });
+
   } catch (error) {
     console.error("❌ Availability check error:", error);
     res.status(500).json({
@@ -102,49 +140,54 @@ router.post("/booking-availability", authMiddleware, async (req, res) => {
 });
 
 // ✅ Route to book an appointment
+router.post("/book-appointment", authMiddleware, async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-router.post('/book-appointment', authMiddleware, async (req, res) => {
   try {
     const { doctorId, date, startTime, endTime } = req.body;
     const userId = req.user.id;
 
     if (!doctorId || !date || !startTime || !endTime) {
-      return res.status(400).json({ success: false, message: 'All fields are required.' });
+      return res.status(400).json({ success: false, message: "All fields are required." });
     }
 
     const startDateTime = moment(`${date} ${startTime}`, "YYYY-MM-DD HH:mm").toDate();
     const endDateTime = moment(`${date} ${endTime}`, "YYYY-MM-DD HH:mm").toDate();
 
     if (isNaN(startDateTime) || isNaN(endDateTime)) {
-      return res.status(400).json({ success: false, message: 'Invalid date or time.' });
+      return res.status(400).json({ success: false, message: "Invalid date or time." });
     }
 
     if (startDateTime >= endDateTime) {
-      return res.status(400).json({ success: false, message: 'End time must be after start time.' });
+      return res.status(400).json({ success: false, message: "End time must be after start time." });
     }
 
-    const bookingUser = await User.findById(userId);
-    const doctorInfo = await Doctor.findById(doctorId);
+    const bookingUser = await User.findById(userId).session(session);
+    const doctorInfo = await Doctor.findById(doctorId).session(session);
     if (!bookingUser || !doctorInfo) {
-      return res.status(404).json({ success: false, message: 'User or doctor not found.' });
+      return res.status(404).json({ success: false, message: "User or doctor not found." });
     }
 
-    const doctorUser = await User.findById(doctorInfo.userId);
+    const doctorUser = await User.findById(doctorInfo.userId).session(session);
     if (!doctorUser) {
       return res.status(404).json({ success: false, message: "Doctor's user not found." });
     }
 
-    // Check for overlapping appointments
+    // Check overlapping appointments
     const overlap = await Appointment.findOne({
       doctorId,
-      status: { $in: ['approved', 'pending'] },
+      status: { $in: ["approved", "pending"] },
       $or: [{ start: { $lt: endDateTime }, end: { $gt: startDateTime } }],
-    });
+    }).session(session);
+
     if (overlap) {
-      return res.status(409).json({ success: false, message: 'Time slot already booked.' });
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(409).json({ success: false, message: "Time slot already booked." });
     }
 
-    // Format dates for email
+    // Format dates for frontend display
     const formattedDate = moment(startDateTime).format("dddd, MMMM D, YYYY");
     const formattedTimeRange = `${moment(startDateTime).format("h:mm A")} - ${moment(endDateTime).format("h:mm A")}`;
 
@@ -155,224 +198,215 @@ router.post('/book-appointment', authMiddleware, async (req, res) => {
       doctorInfo: {
         firstName: doctorInfo.firstName,
         lastName: doctorInfo.lastName,
-        specialization: doctorInfo.specialization
+        specialization: doctorInfo.specialization,
       },
       userInfo: {
         name: bookingUser.name,
-        email: bookingUser.email
+        email: bookingUser.email,
+        phone: bookingUser.phoneNumber,
       },
       start: startDateTime,
       end: endDateTime,
-      formattedDate,        // Save these
-      formattedTimeRange,   // Save these
-      status: 'pending',
+      status: "pending",
     });
-
     await newAppointment.save();
 
-    // Add in-app notifications
+    // Notifications
     doctorUser.unseenNotifications.push({
       type: "New Appointment Request",
-      message: `New appointment request from ${bookingUser.name}`,
-      onClickPath: `/doctor-appointments/${newAppointment._id}`,
+      message: `New appointment request from ${bookingUser.name} on ${formattedDate} at ${formattedTimeRange}`,
+      onClickPath: `/doctor/appointments/details/${newAppointment._id}`,
     });
 
     bookingUser.unseenNotifications.push({
       type: "Appointment Request Sent",
-      message: `Your request with Dr. ${doctorInfo.firstName} ${doctorInfo.lastName} has been sent.`,
+      message: `Your request with Dr. ${doctorInfo.firstName} ${doctorInfo.lastName} on ${formattedDate} at ${formattedTimeRange} has been sent.`,
       onClickPath: "/appointments",
     });
 
-    await Promise.all([doctorUser.save(), bookingUser.save()]);
+    await Promise.all([doctorUser.save({ session }), bookingUser.save({ session })]);
 
-    // Send email notifications
+    console.log("📧 Sending email to:", bookingUser.email);
+    console.log("Using SMTP USER:", process.env.EMAIL_USERNAME);
+    console.log("Using SMTP PASS exists:", !!process.env.EMAIL_PASSWORD);
+
+
+
+    // ----------------------
+    // ✅ Send emails safely
     try {
-      await Promise.all([
-        sendEmail({
-          to: bookingUser.email,
-          subject: "Appointment Request Sent",
-          html: `
-            <h2>Appointment Request</h2>
-            <p>Dear ${bookingUser.name},</p>
-            <p>Your appointment request with Dr. ${doctorInfo.firstName} ${doctorInfo.lastName} has been received.</p>
-            <p><strong>Date:</strong> ${formattedDate}</p>
-            <p><strong>Time:</strong> ${formattedTimeRange}</p>
-            <p>Status: Pending Approval</p>
-          `
-        }),
-        sendEmail({
-          to: doctorUser.email,
-          subject: "New Appointment Request",
-          html: `
-            <h2>New Appointment Request</h2>
-            <p>Dear Dr. ${doctorInfo.firstName},</p>
-            <p>You have a new appointment request from ${bookingUser.name}.</p>
-            <p><strong>Date:</strong> ${formattedDate}</p>
-            <p><strong>Time:</strong> ${formattedTimeRange}</p>
-            <p>Please log in to your account to approve or reject this request.</p>
-          `
-        })
-      ]);
-    } catch (emailErr) {
-      console.error("📧 Email send failed:", emailErr.message);
+      await sendEmail({
+        to: bookingUser.email,
+        subject: "Appointment Request Sent",
+        text: `Your appointment with Dr. ${doctorInfo.firstName} ${doctorInfo.lastName} has been received for ${formattedDate} at ${formattedTimeRange}. Status: Pending Approval.`,
+        html: `
+          <h2>Appointment Request</h2>
+          <p>Dear ${bookingUser.name},</p>
+          <p>Your appointment request with Dr. ${doctorInfo.firstName} ${doctorInfo.lastName} has been received.</p>
+          <p><strong>Date:</strong> ${formattedDate}</p>
+          <p><strong>Time:</strong> ${formattedTimeRange}</p>
+          <p>Status: Pending Approval</p>
+        `,
+      });
+    } catch (err) {
+      console.error("Failed to send email to user:", err.message);
     }
 
-    res.status(200).json({ success: true, message: 'Appointment booked successfully.' });
+    try {
+      await sendEmail({
+        to: doctorUser.email,
+        subject: "New Appointment Request",
+        text: `New appointment request from ${bookingUser.name} on ${formattedDate} at ${formattedTimeRange}.`,
+        html: `
+          <h2>New Appointment Request</h2>
+          <p>Dear Dr. ${doctorInfo.firstName},</p>
+          <p>You have a new appointment request from ${bookingUser.name}.</p>
+          <p><strong>Date:</strong> ${formattedDate}</p>
+          <p><strong>Time:</strong> ${formattedTimeRange}</p>
+          <p>Please log in to your account to approve or reject this request.</p>
+        `,
+      });
+    } catch (err) {
+      console.error("Failed to send email to doctor:", err.message);
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(200).json({ success: true, message: "Appointment booked successfully." });
 
   } catch (error) {
-    console.error("❌ Booking Error:", error);
-    res.status(500).json({ success: false, message: 'Internal Server Error', error: error.message });
+    await session.abortTransaction();
+    session.endSession();
+    console.error("Booking Error:", error);
+    console.error("Stack Trace:", error.stack);
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
   }
 });
+// ----------------------
+// Get details for a single appointment
+router.get('/details/:id', authMiddleware, async (req, res) => {
+  try {
+    const appointmentId = req.params.id;
 
-// ✅ Get single appointment details by ID
-router.get('/appointment/details/:appointmentId', authMiddleware, async (req, res) => {
-  try {
-    const appointment = await Appointment.findById(req.params.appointmentId)
-      .populate('userId', 'name email');
-    if (!appointment) {
-      return res.status(404).json({ success: false, message: "Appointment not found" });
-    }
-    res.status(200).json({ success: true, data: appointment });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-// ✅ Get single appointment by ID
-router.get("/appointments/:appointmentId", authMiddleware, async (req, res) => {
-  try {
-    const appointment = await Appointment.findById(req.params.appointmentId)
-      .populate("userId", "name email");
-    if (!appointment) {
-      return res.status(404).send({ success: false, message: "Appointment not found" });
-    }
-    res.status(200).send({ success: true, data: appointment });
-  } catch (error) {
-    res.status(500).send({ success: false, message: "Error fetching appointment", error: error.message });
-  }
-});
-// Get appointment details by appointmentId
-router.get('/details/:appointmentId', authMiddleware, async (req, res) => {
-  try {
-    const appointment = await Appointment.findById(req.params.appointmentId)
-      .populate('userId', 'name email'); // populate patient info
+    const appointment = await Appointment.findById(appointmentId)
+      .populate('userId', 'name email')    // populate user name & email
+      .populate('doctorId', 'firstName lastName'); // optional doctor info
+
     if (!appointment) {
       return res.status(404).json({ success: false, message: 'Appointment not found' });
     }
-    res.status(200).json({ success: true, data: appointment });
+
+    // Ensure formatted fields exist
+    const formattedDate = appointment.formattedDate || moment(appointment.start).format('YYYY-MM-DD');
+    const formattedTimeRange = appointment.formattedTimeRange || `${moment(appointment.start).format('HH:mm')} - ${moment(appointment.end).format('HH:mm')}`;
+
+    res.json({
+      success: true,
+      data: {
+        ...appointment.toObject(),
+        formattedDate,
+        formattedTimeRange,
+      },
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Error fetching appointment details:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-router.post('/update-appointment-status', authMiddleware, async (req, res) => {
+router.post("/update-appointment-status", authMiddleware, async (req, res) => {
   try {
-    const { appointmentId, status } = req.body;
-    const userId = req.user.id;
+    console.log("📩 Request body:", req.body);
 
-    // Validate input
-    if (!appointmentId || !['approved', 'rejected'].includes(status)) {
-      return res.status(400).json({ success: false, message: 'Invalid appointment ID or status.' });
+    const { appointmentId, status } = req.body;
+    if (!appointmentId || !status) {
+      console.log("❌ Missing required fields");
+      return res.status(400).json({ success: false, message: "Missing appointmentId or status" });
     }
 
     // Find appointment
     const appointment = await Appointment.findById(appointmentId);
     if (!appointment) {
-      return res.status(404).json({ success: false, message: 'Appointment not found.' });
+      console.log("❌ Appointment not found");
+      return res.status(404).json({ success: false, message: "Appointment not found" });
     }
 
-    // Log appointment object for debugging
-    console.log("Fetched appointment:", appointment);
-    console.log("appointment.start:", appointment.start);
-    console.log("appointment.end:", appointment.end);
-
-    // Defensive check for missing date/time before formatting
-    if (!appointment.start || !appointment.end) {
-      console.error('Missing start or end date on appointment:', appointment);
-      return res.status(400).json({ success: false, message: 'Appointment date/time is incomplete.' });
-    }
-
-    // Validate moment date parsing inside try/catch
-    let startMoment, endMoment;
-    try {
-      startMoment = moment(appointment.start);
-      endMoment = moment(appointment.end);
-      if (!startMoment.isValid() || !endMoment.isValid()) {
-        console.error('Invalid moment date:', appointment.start, appointment.end);
-        return res.status(400).json({ success: false, message: 'Appointment date/time is invalid.' });
-      }
-    } catch (momentErr) {
-      console.error('Error parsing appointment dates with moment:', momentErr);
-      return res.status(500).json({ success: false, message: 'Error processing appointment dates.' });
-    }
-
-    // Confirm user exists
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(401).json({ success: false, message: 'Unauthorized: user not found.' });
-    }
-
-    // Find doctor profile linked to this user
-    const doctor = await Doctor.findOne({ userId: user._id });
-    if (!doctor) {
-      return res.status(401).json({ success: false, message: 'Unauthorized: doctor profile not found.' });
-    }
-
-    // Check that appointment belongs to this doctor
-    if (appointment.doctorId.toString() !== doctor._id.toString()) {
-      return res.status(403).json({ success: false, message: 'Unauthorized: cannot update this appointment.' });
-    }
+    console.log("✅ Appointment found:", appointment);
 
     // Update status
     appointment.status = status;
     await appointment.save();
+    console.log("✅ Status updated in DB");
 
-    // Format dates safely
-    const formattedDate = startMoment.format('dddd, MMMM D, YYYY');
-    const formattedTimeRange = `${startMoment.format('h:mm A')} - ${endMoment.format('h:mm A')}`;
+    // Find doctor & patient users
+    const doctor = await Doctor.findById(appointment.doctorId);
+    const doctorUser = doctor ? await User.findById(doctor.userId) : null;
+    const patientUser = await User.findById(appointment.userId);
 
-    // Find patient info (user who booked)
-    const patient = await User.findById(appointment.userId);
-    if (!patient) {
-      console.error("Patient not found for appointment:", appointment.userId);
-      return res.status(404).json({ success: false, message: 'Patient not found.' });
+    // ✅ Notify doctor
+    if (doctorUser) {
+      doctorUser.unseenNotifications.push({
+        type: "appointment-status-updated",
+        message: `Your appointment with ${patientUser?.name || "a patient"} has been ${status}.`,
+        onClickPath: `/doctor/appointments/details/${appointment._id}`, // fixed path
+      });
+      await doctorUser.save();
     }
 
-    // Send email to patient about status change
-    if (status === 'approved') {
-      await sendEmail({
-        to: patient.email,
-        subject: 'Appointment Approved',
-        html: `
-          <h2>Appointment Approved</h2>
-          <p>Dear ${patient.name},</p>
-          <p>Your appointment with Dr. ${appointment.doctorInfo.firstName} ${appointment.doctorInfo.lastName} has been approved.</p>
-          <p><strong>Date:</strong> ${formattedDate}</p>
-          <p><strong>Time:</strong> ${formattedTimeRange}</p>
-          <p>Thank you for using our service.</p>
-        `,
+    // ✅ Notify patient
+    if (patientUser) {
+      patientUser.unseenNotifications.push({
+        type: "appointment-status-updated",
+        message: `Your appointment with Dr. ${doctor?.firstName || ""} ${doctor?.lastName || ""} has been ${status}.`,
+        onClickPath: "/appointments", // patient dashboard
       });
-    } else if (status === 'rejected') {
-      await sendEmail({
-        to: patient.email,
-        subject: 'Appointment Rejected',
-        html: `
-          <h2>Appointment Rejected</h2>
-          <p>Dear ${patient.name},</p>
-          <p>Unfortunately, your appointment request with Dr. ${appointment.doctorInfo.firstName} ${appointment.doctorInfo.lastName} has been rejected.</p>
-          <p>Please consider booking another time.</p>
-        `,
-      });
+      await patientUser.save();
     }
 
-    res.status(200).json({ success: true, message: `Appointment ${status} successfully.` });
+    // ✅ Try sending email (doesn't break API if fails)
+    try {
+      const doctorName = doctor ? `${doctor.firstName} ${doctor.lastName}` : "Your Doctor";
+      const appointmentDate = appointment.date
+        ? new Date(appointment.date).toLocaleDateString()
+        : "Scheduled Date";
 
-  } catch (error) {
-    console.error("❌ Error updating appointment:", error.stack || error);
-    res.status(500).json({ success: false, message: 'Error updating appointment.', error: error.message });
+      let subject = "";
+      let text = "";
+
+      if (status === "approved") {
+        subject = "Appointment Approved";
+        text = `Hello ${patientUser?.name},\n\nYour appointment with ${doctorName} on ${appointmentDate} has been approved.\n\nThank you.`;
+      } else if (status === "rejected") {
+        subject = "Appointment Rejected";
+        text = `Hello ${patientUser?.name},\n\nUnfortunately, your appointment with ${doctorName} on ${appointmentDate} has been rejected.\n\nPlease book again.`;
+      }
+
+      if (patientUser?.email) {
+        await sendEmail({ to: patientUser.email, subject, text });
+        console.log("✅ Email sent successfully");
+      } else {
+        console.log("⚠ No email found for patient");
+      }
+    } catch (emailErr) {
+      console.error("❌ Email send failed:", emailErr.message);
+    }
+
+    // Final response
+    res.status(200).json({
+      success: true,
+      message: `Appointment ${status} successfully.`,
+    });
+
+  } catch (err) {
+    console.error("❌ Server error at /update-appointment-status:", err.stack || err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
-
 
 module.exports = router;
 

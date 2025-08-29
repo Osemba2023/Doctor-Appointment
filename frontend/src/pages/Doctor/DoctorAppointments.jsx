@@ -1,34 +1,59 @@
-// DoctorAppointments.jsx
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import toast from "react-hot-toast";
-import { Link } from "react-router-dom";
+import { Table, message, Spin, Button } from "antd";
+import { useNavigate } from "react-router-dom";
+import moment from "moment";
 
-function DoctorAppointments() {
+const DoctorAppointments = () => {
   const [appointments, setAppointments] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
+  // Fetch all appointments for logged-in doctor
   const fetchAppointments = async () => {
     try {
       setLoading(true);
+      const token = localStorage.getItem("token");
+
+      const res = await axios.get("/api/doctor/appointments", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.data.success) {
+        setAppointments(res.data.data);
+      } else {
+        message.error(res.data.message || "Failed to fetch appointments");
+      }
+    } catch (error) {
+      console.error("Error fetching appointments:", error);
+      message.error("Server error while fetching appointments");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Approve / Reject appointment
+  const updateStatus = async (id, status) => {
+    try {
+      const token = localStorage.getItem("token");
+
       const res = await axios.post(
-        "/api/doctor/get-appointments-by-doctor-id",
-        {},
-        {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        }
+        "/api/doctor/change-appointment-status",
+        { appointmentId: id, status },
+        { headers: { Authorization: `Bearer ${token}` } }
       );
 
       if (res.data.success) {
-        setAppointments(res.data.data || []);
+        message.success(`Appointment ${status} successfully`);
+
+        // Refresh list after status update
+        fetchAppointments();
       } else {
-        toast.error("Failed to fetch appointments");
+        message.error(res.data.message || "Error updating appointment");
       }
     } catch (error) {
-      console.error(error);
-      toast.error("Error fetching appointments");
-    } finally {
-      setLoading(false);
+      console.error("Error updating status:", error);
+      message.error("Server error while updating appointment");
     }
   };
 
@@ -36,54 +61,80 @@ function DoctorAppointments() {
     fetchAppointments();
   }, []);
 
-  if (loading) return <p>Loading appointments...</p>;
+  const columns = [
+    { title: "Patient Name", dataIndex: "patientName", key: "patientName" },
+    { title: "Email", dataIndex: "patientEmail", key: "patientEmail" },
+    { title: "Phone", dataIndex: "patientPhone", key: "patientPhone" },
+    { title: "Date", dataIndex: "formattedDate", key: "date" },
+    { title: "Time", dataIndex: "formattedTime", key: "time" },
+    {
+      title: "Status",
+      dataIndex: "status",
+      key: "status",
+      render: (status) => <span style={{ textTransform: "capitalize" }}>{status}</span>,
+    },
+    {
+      title: "Action",
+      key: "action",
+      render: (_, record) => (
+        <>
+          {record.status === "pending" && (
+            <>
+              <button
+                className="btn btn-success btn-sm me-2"
+                onClick={() => updateStatus(record._id, "approved")}
+              >
+                Approve
+              </button>
+              <button
+                className="btn btn-danger btn-sm me-2"
+                onClick={() => updateStatus(record._id, "rejected")}
+              >
+                Reject
+              </button>
+            </>
+          )}
+          <Button onClick={() => navigate(`/doctor/patient-details/${record.userId}`)}>
+            View Details
+          </Button>
+        </>
+      ),
+    },
+  ];
 
   return (
-    <div>
-      <h2>My Appointments</h2>
-      {appointments.length === 0 ? (
-        <p>No appointments found</p>
+    <div className="p-4">
+      <h3 className="page-title mb-4">Doctor Appointments</h3>
+      {loading ? (
+        <Spin size="large" tip="Loading appointments..." />
       ) : (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Patient</th>
-              <th>Date</th>
-              <th>Time</th>
-              <th>Status</th>
-              <th>Details</th>
-            </tr>
-          </thead>
-          <tbody>
-            {appointments.map((appt) => {
-              const start = appt.start
-                ? new Date(appt.start).toLocaleString()
-                : "N/A";
-              return (
-                <tr key={appt._id}>
-                  <td>{appt.userInfo?.name || appt.userId?.name || "Unknown"}</td>
-                  <td>{start.split(",")[0]}</td>
-                  <td>{start.split(",")[1]}</td>
-                  <td>{appt.status}</td>
-                  <td>
-                    <Link
-                      to={`/doctor-appointment-details/${appt._id}`}
-                      className="btn btn-primary btn-sm"
-                    >
-                      View
-                    </Link>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <Table
+          columns={columns}
+          dataSource={appointments}
+          rowKey="_id"
+          pagination={{ pageSize: 5 }}
+        />
       )}
     </div>
   );
-}
+};
 
 export default DoctorAppointments;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

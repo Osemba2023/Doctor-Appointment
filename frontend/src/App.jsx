@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { Toaster } from 'react-hot-toast';
 import { useSelector } from 'react-redux';
 
@@ -17,10 +17,12 @@ import UsersList from '@/pages/Admin/UsersList.jsx';
 import DoctorsList from '@/pages/Admin/DoctorsList.jsx';
 import DoctorProfile from '@/pages/DoctorProfile.jsx';
 import BookAppointment from '@/pages/BookAppointment.jsx';
-import Appointments from '@/pages/Appointments.jsx'; // ✅ Add this line
+import Appointments from '@/pages/Appointments.jsx';
 import DoctorAppointmentDetails from "@/pages/Doctor/DoctorAppointmentDetails.jsx";
 import PatientHistory from '@/pages/Doctor/PatientHistory.jsx';
 import DoctorAppointments from '@/pages/Doctor/DoctorAppointments.jsx';
+import PatientDetails from "@/pages/Doctor/PatientDetails";
+import PatientProfile from './pages/Patient/PatientProfile';
 
 
 function App() {
@@ -39,18 +41,32 @@ function App() {
     { path: '/users', element: <UsersList /> },
     { path: '/doctors', element: <DoctorsList /> },
     { path: '/admin/doctors', element: <DoctorsList /> },
-    { path: '/doctor-appointments/:appointmentId', element: <DoctorAppointmentDetails />, role: 'doctor' },
-    { path: '/profile/:userId', element: <DoctorProfile />, role: 'doctor' },
-    { path: '/book-appointment/:userId', element: <BookAppointment />, role: 'user' },
-    { path: '/appointments', element: <Appointments />, role: 'user' },
-    { path: '/admin/doctorslist', element: <DoctorsList /> },
-    { path: '/doctor/patient-history/:userId', element: <PatientHistory />, role: 'doctor' }, // ✅ This is correct
+
+    // ✅ Doctor routes
     { path: '/doctor/appointments', element: <DoctorAppointments />, role: 'doctor' },
+    { path: '/doctor/appointments/details/:appointmentId', element: <DoctorAppointmentDetails />, role: 'doctor' },
+    { path: '/doctor/patient-history/:userId', element: <PatientHistory />, role: 'doctor' },
+    { path: '/doctor/patient-details/:userId', element: <PatientDetails />, role: 'doctor' },
+    { path: '/profile/:userId', element: <DoctorProfile />, role: 'doctor' }, // doctor sees a specific patient
+
+    // ✅ Add this so notifications redirect properly
     { path: '/doctor-appointments', element: <DoctorAppointments />, role: 'doctor' },
 
 
-  ];
+    // ✅ Public user routes (patients)
+    { path: '/profile', element: <PatientProfile />, role: 'user' },
+    { path: '/appointments', element: <Appointments />, role: 'user' },
+    { path: '/book-appointment/:userId', element: <BookAppointment />, role: 'user' },
+    { path: '/apply-doctor', element: <ApplyDoctor />, role: 'user' },
+    { path: '/notifications', element: <Notifications />, role: 'user' },
 
+    // ✅ Admin routes
+    { path: '/admin', element: <AdminDashboard />, role: 'admin' },
+    { path: '/users', element: <UsersList />, role: 'admin' },
+    { path: '/doctors', element: <DoctorsList />, role: 'admin' },
+    { path: '/admin/doctors', element: <DoctorsList />, role: 'admin' },
+    { path: '/admin/doctorslist', element: <DoctorsList />, role: 'admin' },
+  ];
 
   return (
     <>

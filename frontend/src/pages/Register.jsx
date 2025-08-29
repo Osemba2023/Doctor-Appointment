@@ -13,11 +13,10 @@ function Register() {
   const onFinish = async (values) => {
     try {
       dispatch(showLoading());
-      const res = await axios.post("/api/user/register", values); // ✅ corrected endpoint
+      const res = await axios.post("/api/user/register", values); // send name, email, password, phoneNumber
       dispatch(hideLoading());
       if (res.data.success) {
         toast.success(res.data.message);
-      
         navigate("/login");
       } else {
         toast.error(res.data.message);
@@ -33,17 +32,24 @@ function Register() {
       <div className='authentication-form card p-3'>
         <h1 className='card-title'>Welcome to our Online Health Platform</h1>
         <Form layout='vertical' onFinish={onFinish}>
-          <Form.Item label='Name' name='name'>
+          <Form.Item label='Name' name='name' rules={[{ required: true, message: "Please enter your name" }]}>
             <Input placeholder='Name' />
           </Form.Item>
-          <Form.Item label='Email' name='email'>
+
+          <Form.Item label='Email' name='email' rules={[{ required: true, message: "Please enter your email" }]}>
             <Input placeholder='Email' />
           </Form.Item>
-          <Form.Item label='Password' name='password'>
+
+          <Form.Item label='Password' name='password' rules={[{ required: true, message: "Please enter your password" }]}>
             <Input placeholder='Password' type='password' />
           </Form.Item>
 
-          <button className='primary-button my-2 full-width-button' htmltype='submit'>REGISTER</button>
+          {/* ✅ New Phone Number Field */}
+          <Form.Item label='Phone Number' name='phoneNumber' rules={[{ required: true, message: "Please enter your phone number" }]}>
+            <Input placeholder='Phone Number' />
+          </Form.Item>
+
+          <button className='primary-button my-2 full-width-button' htmlType='submit'>REGISTER</button>
 
           <Link to='/login' className='anchor mt-2'>CLICK HERE TO LOGIN</Link>
         </Form>
@@ -53,6 +59,7 @@ function Register() {
 }
 
 export default Register;
+
 
 
 

@@ -1,96 +1,90 @@
-import React, { useEffect, useState } from "react"; 
-import { useParams, useNavigate } from "react-router-dom"; 
-import axios from "axios"; 
-import toast from "react-hot-toast"; 
-import moment from "moment"; 
+import React, { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import axios from "axios";
+import toast from "react-hot-toast";
 
-function DoctorAppointmentDetails() { 
-  const { appointmentId } = useParams(); 
-  const navigate = useNavigate(); 
-  const [appointment, setAppointment] = useState(null); 
+function DoctorAppointmentDetails() {
+  const { appointmentId } = useParams();
+  const navigate = useNavigate();
+  const [appointment, setAppointment] = useState(null);
 
-  const fetchAppointment = async () => { 
-    try { 
-      const res = await axios.get(`/api/appointment/details/${appointmentId}`, { 
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }, 
-      }); 
-      if (res.data.success) { 
-        setAppointment(res.data.data); 
-      } else { 
-        toast.error("Failed to fetch appointment"); 
-      } 
-    } catch (error) { 
-      toast.error("Error fetching appointment details"); 
-    } 
-  }; 
+  // Fetch appointment details
+  const fetchAppointment = async () => {
+    try {
+      const res = await axios.get(`/api/appointment/details/${appointmentId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
 
-  const changeStatus = async (status) => { 
-    try { 
-      const res = await axios.post( 
-        "/api/doctor/change-appointment-status", 
-        { appointmentId, status }, 
-        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } } 
-      ); 
-      if (res.data.success) { 
-        toast.success(`Appointment ${status} successfully`); 
-        navigate("/doctor-appointments"); 
-      } else { 
-        toast.error("Failed to update appointment"); 
-      } 
-    } catch (error) { 
-      toast.error("Error updating appointment"); 
-    } 
-  }; 
+      if (res.data.success) {
+        setAppointment(res.data.data);
+      } else {
+        toast.error(res.data.message || "Failed to fetch appointment");
+      }
+    } catch (error) {
+      console.error("Error fetching appointment:", error);
+      toast.error("Error fetching appointment details");
+    }
+  };
 
-  useEffect(() => { 
-    fetchAppointment(); 
-  }, [appointmentId]); 
+  // Change appointment status
+  const changeStatus = async (status) => {
+    try {
+      const res = await axios.post(
+        "/api/doctor/change-appointment-status",
+        { appointmentId, status },
+        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+      );
 
-  if (!appointment) return <p>Loading...</p>; 
+      if (res.data.success) {
+        toast.success(`Appointment ${status} successfully`);
+        navigate("/doctor/appointments");
+      } else {
+        toast.error(res.data.message || "Failed to update appointment");
+      }
+    } catch (error) {
+      console.error("Error updating appointment:", error);
+      toast.error("Error updating appointment");
+    }
+  };
 
-  // Defensive date checks before formatting 
-  const startMoment = appointment.start ? moment(appointment.start) : null; 
-  const endMoment = appointment.end ? moment(appointment.end) : null; 
+  useEffect(() => {
+    fetchAppointment();
+  }, [appointmentId]);
 
-  return ( 
-    <div> 
-      <h2>Appointment Details</h2> 
-      <p><strong>Patient:</strong> {appointment.userInfo?.name || appointment.userId?.name}</p> 
+  if (!appointment) return <p>Loading...</p>;
 
-      <p> 
-        <strong>Date:</strong>{" "} 
-        {startMoment ? startMoment.format("dddd, MMMM D, YYYY") : "No date provided"} 
-      </p> 
-      <p> 
-        <strong>Time:</strong>{" "} 
-        {startMoment && endMoment 
-          ? `${startMoment.format("h:mm A")} - ${endMoment.format("h:mm A")}` 
-          : "No time provided"} 
-      </p> 
+  return (
+    <div className="p-4">
+      <h2 className="text-xl font-bold mb-4">Appointment Details</h2>
 
-      <p><strong>Status:</strong> {appointment.status}</p> 
+      <p><strong>Patient:</strong> {appointment.userInfo?.name || appointment.userId?.name || "Unknown"}</p>
+      <p><strong>Date:</strong> {appointment.formattedDate || "No date provided"}</p>
+      <p><strong>Time:</strong> {appointment.formattedTimeRange || "No time provided"}</p>
+      <p><strong>Status:</strong> {appointment.status}</p>
 
-      {appointment.status === "pending" && ( 
-        <div> 
-          <button 
-            className="btn btn-success" 
-            onClick={() => changeStatus("approved")} 
-          > 
-            Approve 
-          </button> 
-          <button 
-            className="btn btn-danger" 
-            onClick={() => changeStatus("rejected")} 
-          > 
-            Reject 
-          </button> 
-        </div> 
-      )} 
-    </div> 
-  ); 
-} 
+      {appointment.status === "pending" && (
+        <div className="mt-4 flex gap-2">
+          <button
+            className="btn btn-success"
+            onClick={() => changeStatus("approved")}   // ✅ use changeStatus
+          >
+            Approve
+          </button>
+          <button
+            className="btn btn-danger"
+            onClick={() => changeStatus("rejected")}   // ✅ use changeStatus
+          >
+            Reject
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default DoctorAppointmentDetails;
+
+
 
 
 

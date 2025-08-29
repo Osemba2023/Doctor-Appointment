@@ -14,7 +14,7 @@ function Layout({ children }) {
     { name: 'Home', path: '/', icon: 'ri-home-line' },
     { name: 'Appointments', path: '/appointments', icon: 'ri-calendar-line' },
     { name: 'Apply Doctor', path: '/apply-doctor', icon: 'ri-hospital-line' },
-    { name: 'Profile', path: `/profile/${user?._id}`, icon: 'ri-user-line' }
+    { name: 'Profile', path: '/profile', icon: 'ri-user-line' }
   ];
 
   const adminMenu = [
@@ -32,9 +32,9 @@ function Layout({ children }) {
 
   // 👇 Select correct menu based on user role
   const menuToBeRendered =
-  user?.role === 'admin' ? adminMenu :
-  user?.role === 'doctor' ? doctorMenu :
-  userMenu;
+    user?.role === 'admin' ? adminMenu :
+      user?.role === 'doctor' ? doctorMenu :
+        userMenu;
 
   return (
     <div className='main'>
@@ -101,7 +101,9 @@ function Layout({ children }) {
                 <i className="ri-notification-line layout-action-item px-3"></i>
               </Badge>
 
-              <Link to={`/profile/${user?._id}`}>{user?.name}</Link>
+              <Link to={user?.role === 'user' ? '/profile' : `/profile/${user?._id}`}>
+                {user?.name}
+              </Link>
             </div>
           </div>
 
